@@ -30,50 +30,41 @@ class AccountMove(models.Model):
             )
 
     def pay_now(self):
-        for rec in self.filtered(
-            lambda x: x.pay_now_journal_id and x.state == "posted" and x.payment_state in ("not_paid", "patial")
-        ):
-            pay_journal = rec.pay_now_journal_id
-            if rec.move_type in ["in_invoice", "in_refund"]:
-                partner_type = "supplier"
-            else:
-                partner_type = "customer"
+        for rec in self.filtered(lambda x: x.pay_now_journal_id and x.state == 'posted'
+                                            and x.payment_state in ('not_paid', 'partial')):
 
-            payment_type = "inbound"
-            payment_method = pay_journal._get_manual_payment_method_id(payment_type)
-
-            payment = (
-                rec.env["account.payment"]
-                .with_context(pay_now=True)
-                .create(
-                    {
-                        "date": rec.invoice_date,
-                        "partner_id": rec.commercial_partner_id.id,
-                        "partner_type": partner_type,
-                        "payment_type": payment_type,
-                        "company_id": rec.company_id.id,
-                        "journal_id": pay_journal.id,
-                        "payment_method_id": payment_method.id,
-                        "to_pay_move_line_ids": [Command.set(rec.open_move_line_ids.ids)],
-                        "memo": rec.payment_reference,
-                    }
-                )
+            receivable_lines = rec.line_ids.filtered(
+                lambda l: l.account_id.account_type in ('asset_receivable', 'liability_payable')
+                and not l.reconciled
             )
 
-            # compute payment_difference here to avoid lazy evaluation issues
-            difference = payment.payment_difference
+            if not receivable_lines:
+                continue
 
-            # el difference es positivo para facturas (de cliente o proveedor) pero negativo para NC.
-            # para factura de proveedor o NC de cliente es outbound
-            # para factura de cliente o NC de proveedor es inbound
-            # igualmente lo hacemos con el difference y no con el type por las dudas de que facturas en negativo
-            if partner_type == "supplier" and difference >= 0.0 or partner_type == "customer" and difference < 0.0:
-                payment.payment_type = "outbound"
-                payment.payment_method_id = pay_journal._get_manual_payment_method_id(payment_type).id
+            wizard = self.env['account.payment.register'].with_context(
+                active_model='account.move.line',
+                active_ids=receivable_lines.ids
+            ).create({
+                'journal_id': rec.pay_now_journal_id.id,
+                'payment_date': rec.invoice_date,
+                'amount': abs(rec.amount_residual),
+            })
 
-            payment.amount = abs(difference)
-            payment.action_post()
-            rec.write({"matched_payment_ids": [(4, payment.id)]})
+            payments = wizard._create_payments()
+
+            for payment in payments:
+                payment_lines = payment.move_id.line_ids.filtered(
+                    lambda l: l.account_id.account_type in ('asset_receivable', 'liability_payable')
+                    and not l.reconciled
+                )
+
+                for account in (receivable_lines + payment_lines).mapped('account_id'):
+                    lines_to_reconcile = (receivable_lines + payment_lines).filtered(
+                        lambda l: l.account_id == account and not l.reconciled
+                    )
+
+                    if len(lines_to_reconcile) > 1:
+                        lines_to_reconcile.reconcile()
 
     @api.onchange("journal_id")
     def _onchange_journal_reset_pay_now(self):
@@ -85,10 +76,10 @@ class AccountMove(models.Model):
         self.filtered(lambda x: x.state == "posted" and x.pay_now_journal_id).write({"pay_now_journal_id": False})
         return super().button_draft()
 
-    def _post(self, soft=False):
-        res = super()._post(soft=soft)
-        self.pay_now()
-        return res
+    # def _post(self, soft=False):
+    #     res = super()._post(soft=soft)
+    #     self.pay_now()
+    #     return res
 
     def _search_default_journal(self):
         if self.env.context.get("default_company_id"):
