@@ -587,8 +587,11 @@ class AccountPayment(models.Model):
 
         if internal_transfers or not self._context.get("pay_now"):
             ((internal_transfers or self) - with_payment_pro).to_pay_move_line_ids = [Command.clear()]
-        for rec in with_payment_pro:
-            rec._add_all()
+
+        if with_payment_pro.payment_group_id and with_payment_pro.payment_group_id.debt_move_line_ids:
+            with_payment_pro.to_pay_move_line_ids = with_payment_pro.payment_group_id.debt_move_line_ids
+        # for rec in with_payment_pro:
+        #     rec._add_all()
 
     def _get_filter_payments(self, records, extra_fields):
         records = records.filtered(
