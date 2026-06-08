@@ -21,6 +21,18 @@ class AccountPayment(models.Model):
         compute="_compute_warnings",
     )
 
+    display_journal_id = fields.Many2one(
+        "account.journal",
+        compute="_compute_display_journal_id",
+        store=True,
+        string="Diario",
+    )
+
+    @api.depends("journal_id", "destination_journal_id")
+    def _compute_display_journal_id(self):
+        for rec in self:
+            rec.display_journal_id = rec.destination_journal_id or rec.journal_id    
+
     @api.depends("link_payment_ids.move_id")
     def _compute_show_move_button(self):
         for rec in self:
