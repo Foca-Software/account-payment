@@ -640,16 +640,19 @@ class AccountPayment(models.Model):
     @api.constrains("partner_id", "to_pay_move_line_ids")
     def check_to_pay_lines(self):
         for rec in self:
-            to_pay_partners = rec.to_pay_move_line_ids.mapped("partner_id")
-            if len(to_pay_partners) > 1:
-                raise ValidationError(_("All to pay lines must be of the same partner"))
             if len(rec.to_pay_move_line_ids.mapped("company_id")) > 1:
                 raise ValidationError(_("You can't create payments for entries belonging to different companies."))
-            if to_pay_partners and to_pay_partners != rec.partner_id.commercial_partner_id:
-                raise ValidationError(
-                    _("Payment is for partner %s but payment lines are of partner %s")
-                    % (rec.partner_id.name, to_pay_partners.name)
-                )
+            if rec.to_pay_move_line_ids:
+                madre = rec.partner_id.commercial_partner_id
+                partner_ids_validos = [madre.id] + madre.child_ids.ids
+                partners_invalidos = rec.to_pay_move_line_ids.filtered(
+                    lambda l: l.partner_id.id not in partner_ids_validos
+                ).mapped("partner_id")
+                if partners_invalidos:
+                    raise ValidationError(
+                        _("Payment is for partner %s but payment lines are of partner %s")
+                        % (rec.partner_id.name, partners_invalidos.mapped("name"))
+                    )
 
     def _reconcile_after_post(self):
         for rec in self.filtered(lambda x: x.company_id.use_payment_pro and not x.is_internal_transfer):
