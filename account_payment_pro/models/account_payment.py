@@ -571,7 +571,7 @@ class AccountPayment(models.Model):
                 rec.unreconciled_amount = rec.to_pay_amount - rec.selected_debt
 
     # We dont set 'is_internal_transfer' as a dependencies as it could leed to recompute to_pay_move_line_ids
-    @api.depends("partner_id", "partner_type", "company_id")
+    @api.depends("partner_id", "partner_type", "company_id", "payment_group_id.to_pay_move_line_ids")
     def _compute_to_pay_move_lines(self):
         # TODO ?
         # # if payment group is being created from a payment we dont want to compute to_pay_move_lines
@@ -653,6 +653,21 @@ class AccountPayment(models.Model):
                         _("Payment is for partner %s but payment lines are of partner %s")
                         % (rec.partner_id.name, partners_invalidos.mapped("name"))
                     )
+
+    @api.constrains("to_pay_move_line_ids", "payment_group_id")
+    def _check_to_pay_move_line_ids_payment_group(self):
+        """Cuando el pago pertenece a un grupo de pago, las líneas a pagar se
+        definen desde el grupo (y se sincronizan automáticamente mediante
+        el compute de to_pay_move_line_ids), por lo que no se permite
+        agregar ni quitar líneas manualmente desde el pago individual.
+        """
+        for rec in self:
+            if rec.payment_group_id and rec.to_pay_move_line_ids != rec.payment_group_id.to_pay_move_line_ids:
+                raise ValidationError(_(
+                    "No puede agregar ni quitar líneas a pagar en un pago que "
+                    "pertenece a un grupo de pago. Modifique las líneas a pagar "
+                    "desde el grupo de pago."
+                ))
 
     def _reconcile_after_post(self):
         for rec in self.filtered(lambda x: x.company_id.use_payment_pro and not x.is_internal_transfer):
