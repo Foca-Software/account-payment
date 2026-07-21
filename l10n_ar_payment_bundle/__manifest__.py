@@ -14,8 +14,7 @@
         "bin": [],
     },
     "depends": [
-        "account_payment_pro",
-        "l10n_ar_tax",
+        "account_payment_group",
         "account_payment_pro_receiptbook",
     ],
     "data": [
