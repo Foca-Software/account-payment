@@ -660,8 +660,11 @@ class AccountPayment(models.Model):
         definen desde el grupo (y se sincronizan automáticamente mediante
         el compute de to_pay_move_line_ids), por lo que no se permite
         agregar ni quitar líneas manualmente desde el pago individual.
+        Solo aplica a pagos en borrador: una vez posteado, el pago es una
+        foto histórica y el grupo puede divergir luego legítimamente (ej.
+        al crear una NC de la factura pagada).
         """
-        for rec in self:
+        for rec in self.filtered(lambda x: x.state == "draft"):
             if rec.payment_group_id and rec.to_pay_move_line_ids != rec.payment_group_id.to_pay_move_line_ids:
                 raise ValidationError(_(
                     "No puede agregar ni quitar líneas a pagar en un pago que "
