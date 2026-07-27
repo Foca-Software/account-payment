@@ -586,7 +586,14 @@ class AccountPayment(models.Model):
         with_payment_pro = self._get_filter_payments(records, ["direct_debit_mandate_id"])
 
         if internal_transfers or not self._context.get("pay_now"):
-            ((internal_transfers or self) - with_payment_pro).to_pay_move_line_ids = [Command.clear()]
+            # Antes usaba (internal_transfers or self), que si records queda
+            # vacío (ej. el payment ya cambió de state a 'posted' durante
+            # action_post del grupo) cae a "self" completo y limpia
+            # to_pay_move_line_ids de pagos ya posteados, desincronizándolos
+            # de payment_group_id.to_pay_move_line_ids y disparando el
+            # ValidationError de RN-1. Ver SW-2040.
+            ((internal_transfers or records) - with_payment_pro).to_pay_move_line_ids = [Command.clear()]
+
 
         if with_payment_pro.payment_group_id and with_payment_pro.payment_group_id.debt_move_line_ids:
             with_payment_pro.to_pay_move_line_ids = with_payment_pro.payment_group_id.debt_move_line_ids
