@@ -21,3 +21,17 @@ class AccountJournal(models.Model):
         if not payment_method:
             raise ValidationError(_("Journal must have manual method!"))
         return payment_method
+
+    def _get_manual_payment_method_line_id(self, direction="inbound"):
+        self.ensure_one()
+        if direction == "inbound":
+            method_line = self.inbound_payment_method_line_ids.filtered(
+                lambda x: x.payment_method_id.code == "manual"
+            )
+        else:
+            method_line = self.outbound_payment_method_line_ids.filtered(
+                lambda x: x.payment_method_id.code == "manual"
+            )
+        if not method_line:
+            raise ValidationError(_("Journal must have manual method!"))
+        return method_line[:1]
