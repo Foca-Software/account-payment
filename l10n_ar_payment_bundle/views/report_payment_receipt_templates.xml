@@ -2,7 +2,11 @@
 <odoo>
     <template id="report_payment_receipt_document" inherit_id="l10n_ar_tax.report_payment_receipt_document">
         <xpath  expr="//t[@id='payment_bundle_doc']/tr" position="attributes">
-            <attribute name="t-if">doc.payment_method_line_id.payment_method_id.code != 'payment_bundle'</attribute>
+            <!-- Ocultamos el pago cuando es una retención "manual" (un account.payment creado solo para
+                 representar la retención) ya que su importe se muestra en la fila de la retención en la
+                 tabla de arriba (payment_bundle.l10n_ar_withholding_line_ids); mostrarlo también acá
+                 duplica el importe en el PDF -->
+            <attribute name="t-if">doc.payment_method_line_id.payment_method_id.code != 'payment_bundle' and not (doc.l10n_ar_withholding_line_ids and sum(doc.l10n_ar_withholding_line_ids.mapped('amount')) == doc.amount)</attribute>
         </xpath>
         <xpath expr="//table[@name='payments_table']/tfoot" position="attributes">
             <attribute name="t-if">o.payment_method_line_id.payment_method_id.code != 'payment_bundle'</attribute>
